@@ -17,6 +17,14 @@ on:
         options:
           - debug
           - release
+      sign:
+        description: >-
+          Sign the release APK with the repository's release keystore.
+          Requires `build_type=release` and the `release-signing`
+          environment to be configured with the secrets documented at
+          the top of this workflow.
+        type: boolean
+        default: false
 
 env:
   # `push` and `pull_request` events have no inputs; default to `debug`
@@ -26,10 +34,43 @@ env:
 permissions:
   contents: read
 
+# ---------------------------------------------------------------------
+# Opt-in release signing
+# ---------------------------------------------------------------------
+# When the manual `sign` input is `true`, the `build` job runs inside
+# the GitHub Environment `release-signing`, which is where the signing
+# secrets live (so they cannot leak into ordinary `push` /
+# `pull_request` runs, including from forks). Configure the environment
+# under Settings -> Environments -> `release-signing` with these
+# secrets:
+#
+#   RELEASE_KEYSTORE_BASE64   Base64-encoded contents of the JKS/PKCS12
+#                             keystore (e.g. `base64 -w0 release.jks`).
+#   RELEASE_STORE_PASSWORD    Password for the keystore file.
+#   RELEASE_KEY_ALIAS         Alias of the signing key inside the
+#                             keystore.
+#   RELEASE_KEY_PASSWORD      Password for that key (often the same as
+#                             the store password).
+#
+# The names match the Gradle properties that `app/build.gradle.kts`
+# already consumes to wire up `signingConfigs.release`, so no changes
+# to the app's build script are needed.
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Attaching an environment only when `sign` is true keeps unsigned
+    # runs free of any environment protection rules / required
+    # reviewers, and -- crucially -- prevents secrets from being
+    # exposed to runs that don't need them.
+    environment: ${{ (inputs.sign && 'release-signing') || '' }}
     steps:
+      - name: Validate inputs
+        if: ${{ inputs.sign && inputs.build_type != 'release' }}
+        run: |
+          echo "::error::sign=true requires build_type=release; got build_type=${{ inputs.build_type }}." >&2
+          exit 1
+
       - uses: actions/checkout@v6
 
       - uses: actions/setup-java@v5
@@ -39,16 +80,44 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
+      # Materialise the keystore from the base64-encoded secret into
+      # `$RUNNER_TEMP`, which is outside the workspace and is wiped at
+      # the end of the job, so it never ends up in the checkout or an
+      # uploaded artifact.
+      - name: Decode release keystore
+        if: ${{ inputs.sign }}
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          keystore="$RUNNER_TEMP/release.keystore"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$keystore"
+          echo "RELEASE_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+
       # `assembleDebug` / `assembleRelease` are the canonical AGP tasks
-      # for each build type. A `release` build produced here is
-      # *unsigned*: `app/build.gradle.kts` only wires a signing config
-      # when the `RELEASE_STORE_FILE` Gradle property is set, and we do
-      # not set it in this job. Unsigned release APKs cannot be
-      # installed on a device as-is; signing is added opt-in by a
-      # follow-up change.
-      - run: ./gradlew "assemble${BUILD_TYPE^}"
+      # for each build type. When `sign=true`, the four `-P…` flags
+      # satisfy the `project.hasProperty("RELEASE_STORE_FILE")` guard
+      # in `app/build.gradle.kts`, causing AGP to sign the release APK
+      # with the decoded keystore. When `sign=false`, none of the
+      # properties are set and the release APK is produced unsigned --
+      # exactly as before this commit.
+      - name: Assemble APK
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          args=()
+          if [ "${{ inputs.sign }}" = "true" ]; then
+            args+=(
+              "-PRELEASE_STORE_FILE=$RELEASE_STORE_FILE"
+              "-PRELEASE_STORE_PASSWORD=$RELEASE_STORE_PASSWORD"
+              "-PRELEASE_KEY_ALIAS=$RELEASE_KEY_ALIAS"
+              "-PRELEASE_KEY_PASSWORD=$RELEASE_KEY_PASSWORD"
+            )
+          fi
+          ./gradlew "assemble${BUILD_TYPE^}" "${args[@]}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: app-${{ env.BUILD_TYPE }}-apk
+          name: app-${{ env.BUILD_TYPE }}${{ inputs.sign && '-signed' || '' }}-apk
           path: app/build/outputs/apk/${{ env.BUILD_TYPE }}/*.apk
