@@ -9,6 +9,19 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: "Which Android build type to assemble"
+        type: choice
+        default: debug
+        options:
+          - debug
+          - release
+
+env:
+  # `push` and `pull_request` events have no inputs; default to `debug`
+  # there so CI-for-every-commit stays fast and unsigned-by-design.
+  BUILD_TYPE: ${{ inputs.build_type || 'debug' }}
 
 permissions:
   contents: read
@@ -26,9 +39,16 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v6
 
-      - run: ./gradlew assembleDebug
+      # `assembleDebug` / `assembleRelease` are the canonical AGP tasks
+      # for each build type. A `release` build produced here is
+      # *unsigned*: `app/build.gradle.kts` only wires a signing config
+      # when the `RELEASE_STORE_FILE` Gradle property is set, and we do
+      # not set it in this job. Unsigned release APKs cannot be
+      # installed on a device as-is; signing is added opt-in by a
+      # follow-up change.
+      - run: ./gradlew "assemble${BUILD_TYPE^}"
 
       - uses: actions/upload-artifact@v7
         with:
-          name: app-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: app-${{ env.BUILD_TYPE }}-apk
+          path: app/build/outputs/apk/${{ env.BUILD_TYPE }}/*.apk
