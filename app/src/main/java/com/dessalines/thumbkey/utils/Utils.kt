@@ -376,6 +376,9 @@ fun performKeyAction(
         is KeyAction.SendEvent -> {
             val ev = action.event
             Log.d(TAG, "sending key event: $ev")
+            if (ev.keyCode in CURSOR_NAVIGATION_KEYCODES) {
+                ime.currentInputConnection.finishComposingText()
+            }
             keyboardSettings.textProcessor?.handleKeyEvent(ime, ev)
                 ?: ime.currentInputConnection.sendKeyEvent(ev)
             onKeyEvent()
@@ -1661,13 +1664,29 @@ fun deleteWordAfterCursor(ime: IMEService) {
     ime.currentInputConnection.deleteSurroundingText(0, nextWordLength)
 }
 
+// Editors like Firefox's URL bar don't auto-finish a composing region on
+// these; finishComposingText() must be called first.
+val CURSOR_NAVIGATION_KEYCODES =
+    setOf(
+        KeyEvent.KEYCODE_DPAD_UP,
+        KeyEvent.KEYCODE_DPAD_DOWN,
+        KeyEvent.KEYCODE_DPAD_LEFT,
+        KeyEvent.KEYCODE_DPAD_RIGHT,
+        KeyEvent.KEYCODE_MOVE_HOME,
+        KeyEvent.KEYCODE_MOVE_END,
+        KeyEvent.KEYCODE_PAGE_UP,
+        KeyEvent.KEYCODE_PAGE_DOWN,
+    )
+
 fun moveCursor(
     ime: IMEService,
     delta: Int,
 ) {
+    val ic = ime.currentInputConnection
+    ic.finishComposingText()
     val selection = startSelection(ime)
     selection.right(delta)
-    ime.currentInputConnection.setSelection(selection.end, selection.end)
+    ic.setSelection(selection.end, selection.end)
 }
 
 fun cursorToLineStart(ime: IMEService) {
@@ -1683,11 +1702,14 @@ fun cursorToLineEnd(ime: IMEService) {
 }
 
 fun cursorToTextStart(ime: IMEService) {
-    ime.currentInputConnection.setSelection(0, 0)
+    val ic = ime.currentInputConnection
+    ic.finishComposingText()
+    ic.setSelection(0, 0)
 }
 
 fun cursorToTextEnd(ime: IMEService) {
     val ic = ime.currentInputConnection
+    ic.finishComposingText()
     // Sum text before and after the cursor to find the absolute end position.
     // Using large limits to handle long documents; typical mobile content is well within range.
     val before = ic.getTextBeforeCursor(1_000_000, 0)?.length ?: return

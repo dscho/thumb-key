@@ -261,6 +261,7 @@ fun KeyboardKey(
             if (slideHoldReturnDetected) {
                 if (dir == SwipeDirection.RIGHT) nextWordAfterCursor(ime) else previousWordBeforeCursor(ime)
             } else {
+                ime.currentInputConnection.finishComposingText()
                 ime.currentInputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
                 ime.currentInputConnection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
             }
@@ -513,6 +514,7 @@ fun KeyboardKey(
                                     } else {
                                         selection.right(abs(cursorMovement))
                                     }
+                                    ime.currentInputConnection.finishComposingText()
                                     ime.currentInputConnection.setSelection(
                                         selection.start,
                                         selection.end,
@@ -553,6 +555,7 @@ fun KeyboardKey(
                                         }
 
                                     selection = Selection(location, location, false)
+                                    ime.currentInputConnection.finishComposingText()
                                     ime.currentInputConnection.setSelection(
                                         selection.start,
                                         selection.end,
@@ -580,6 +583,7 @@ fun KeyboardKey(
                                     if (lengthOfSelectedText > 0) {
                                         // Deselect text that has been selected, but the selection wasn't done by this keyboard.
                                         selection = startSelection(ime)
+                                        ime.currentInputConnection.finishComposingText()
                                         ime.currentInputConnection.setSelection(
                                             selection.start,
                                             selection.end,
@@ -623,6 +627,7 @@ fun KeyboardKey(
                                     } else {
                                         selection.right(abs(cursorMovement))
                                     }
+                                    ime.currentInputConnection.finishComposingText()
                                     ime.currentInputConnection.setSelection(
                                         selection.start,
                                         selection.end,
