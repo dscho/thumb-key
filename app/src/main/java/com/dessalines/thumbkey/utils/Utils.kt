@@ -1690,13 +1690,30 @@ fun moveCursor(
 }
 
 fun cursorToLineStart(ime: IMEService) {
-    ime.currentInputConnection.sendKeyEvent(
+    val ic = ime.currentInputConnection
+    ic.finishComposingText()
+    val before = ic.getTextBeforeCursor(1_000_000, 0)
+    if (before != null) {
+        val nl = before.lastIndexOf('\n')
+        val pos = if (nl < 0) 0 else nl + 1
+        ic.setSelection(pos, pos)
+    }
+    ic.sendKeyEvent(
         KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_HOME),
     )
 }
 
 fun cursorToLineEnd(ime: IMEService) {
-    ime.currentInputConnection.sendKeyEvent(
+    val ic = ime.currentInputConnection
+    ic.finishComposingText()
+    val beforeLen = ic.getTextBeforeCursor(1_000_000, 0)?.length
+    val after = ic.getTextAfterCursor(1_000_000, 0)
+    if (beforeLen != null && after != null) {
+        val nl = after.indexOf('\n')
+        val pos = beforeLen + (if (nl < 0) after.length else nl)
+        ic.setSelection(pos, pos)
+    }
+    ic.sendKeyEvent(
         KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END),
     )
 }
