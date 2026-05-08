@@ -379,8 +379,10 @@ fun performKeyAction(
             if (ev.keyCode in CURSOR_NAVIGATION_KEYCODES) {
                 ime.currentInputConnection.finishComposingText()
             }
-            keyboardSettings.textProcessor?.handleKeyEvent(ime, ev)
-                ?: ime.currentInputConnection.sendKeyEvent(ev)
+            if (!firefoxAcceptInlineAutocomplete(ime, ev.keyCode)) {
+                keyboardSettings.textProcessor?.handleKeyEvent(ime, ev)
+                    ?: ime.currentInputConnection.sendKeyEvent(ev)
+            }
             onKeyEvent()
         }
 
@@ -1706,6 +1708,9 @@ fun cursorToLineStart(ime: IMEService) {
 fun cursorToLineEnd(ime: IMEService) {
     val ic = ime.currentInputConnection
     ic.finishComposingText()
+    if (firefoxAcceptInlineAutocomplete(ime, KeyEvent.KEYCODE_MOVE_END)) {
+        return
+    }
     val beforeLen = ic.getTextBeforeCursor(1_000_000, 0)?.length
     val after = ic.getTextAfterCursor(1_000_000, 0)
     if (beforeLen != null && after != null) {
@@ -1716,6 +1721,41 @@ fun cursorToLineEnd(ime: IMEService) {
     ic.sendKeyEvent(
         KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MOVE_END),
     )
+}
+
+// Firefox/GeckoView's URL bar overlays an inline-autocomplete suggestion on
+// text it has already committed to the buffer, and overrides any setSelection
+// or cursor-navigation key event the IME issues during that overlay (the
+// cursor visibly snaps back to the autocomplete boundary before the next
+// commitText is processed). Re-committing some prefix of the trailing text
+// via deleteSurroundingText + commitText forces the widget to treat that
+// prefix as user input rather than as a tentative suggestion, which both
+// advances the cursor past it and allows subsequent typing to append rather
+// than replace. DPAD_RIGHT advances by one character; DPAD_DOWN and MOVE_END
+// advance to end of line. Returns true if the workaround was applied.
+fun firefoxAcceptInlineAutocomplete(
+    ime: IMEService,
+    keyCode: Int,
+): Boolean {
+    val pkg = ime.currentInputEditorInfo?.packageName.orEmpty()
+    if (!pkg.startsWith("org.mozilla.")) return false
+    val acceptCount =
+        when (keyCode) {
+            KeyEvent.KEYCODE_DPAD_RIGHT -> 1
+            KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_MOVE_END -> Int.MAX_VALUE
+            else -> return false
+        }
+    val ic = ime.currentInputConnection
+    val after = ic.getTextAfterCursor(1_000_000, 0) ?: return false
+    val nl = after.indexOf('\n')
+    val limit = if (nl < 0) after.length else nl
+    val toAccept = minOf(acceptCount, limit)
+    if (toAccept <= 0) return false
+    ic.beginBatchEdit()
+    ic.deleteSurroundingText(0, toAccept)
+    ic.commitText(after.subSequence(0, toAccept), 1)
+    ic.endBatchEdit()
+    return true
 }
 
 fun cursorToTextStart(ime: IMEService) {
