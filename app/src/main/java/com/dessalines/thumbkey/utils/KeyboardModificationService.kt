@@ -80,6 +80,7 @@ fun checkAllKeyboardModifications(
     try {
         val keyModifications = deserializeKeyModifications(keyModifications)
         keyModifications.forEach {
+            if (it.key == VOICE_IME_PREFERENCE_LAYOUT_NAME) return@forEach
             val keyboardLayout = KeyboardLayout.entries.find { layout -> it.key == layout.name }
             if (keyboardLayout == null) {
                 // This should never happen
@@ -94,6 +95,67 @@ fun checkAllKeyboardModifications(
         keyModificationsErrorState.value = errorMessage
         Log.d(TAG, "Error applying key modifications: $errorMessage")
     }
+}
+
+// Sentinel layout name used to smuggle non-keyboard configuration through the
+// YAML key-modifications string. Upstream Thumb-Key parses but ignores it
+// (no matching `KeyboardLayout` entry), so the same key-modifications YAML
+// remains usable across this fork and upstream. The voice-IME preference is
+// stored in `<sentinel>.main.key0_0.center.text`, exploiting `KeyCSerializable.text`
+// as a free-form String slot in the existing schema.
+const val VOICE_IME_PREFERENCE_LAYOUT_NAME = "__thumbkey_voice"
+
+fun getPreferredVoiceImeId(keyModifications: String): String? {
+    if (keyModifications.isBlank()) return null
+    return try {
+        val parsed = deserializeKeyModifications(keyModifications)
+        parsed[VOICE_IME_PREFERENCE_LAYOUT_NAME]
+            ?.main
+            ?.key0_0
+            ?.center
+            ?.text
+            ?.takeIf { it.isNotEmpty() }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+fun setPreferredVoiceImeId(
+    keyModifications: String,
+    imeId: String,
+): String {
+    val current: KeyModifications =
+        if (keyModifications.isBlank()) {
+            emptyMap()
+        } else {
+            try {
+                deserializeKeyModifications(keyModifications)
+            } catch (_: Exception) {
+                // Don't clobber a YAML we can't parse: returning unchanged is
+                // safer than overwriting unsaved syntax errors the user may
+                // still be debugging.
+                return keyModifications
+            }
+        }
+    val updated = current.toMutableMap()
+    if (imeId.isEmpty()) {
+        updated.remove(VOICE_IME_PREFERENCE_LAYOUT_NAME)
+    } else {
+        updated[VOICE_IME_PREFERENCE_LAYOUT_NAME] =
+            KeyboardDefinitionModesSerializable(
+                main =
+                    KeyboardCSerializable(
+                        key0_0 =
+                            KeyItemCSerializable(
+                                center = KeyCSerializable(text = imeId),
+                            ),
+                    ),
+            )
+    }
+    if (updated.isEmpty()) return ""
+    val serializer =
+        MapSerializer(String.serializer(), KeyboardDefinitionModesSerializable.serializer())
+    return getYaml().encodeToString(serializer, updated)
 }
 
 /**
