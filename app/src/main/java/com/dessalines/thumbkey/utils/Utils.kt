@@ -42,6 +42,7 @@ import androidx.navigation.NavController
 import com.dessalines.thumbkey.IMEService
 import com.dessalines.thumbkey.MainActivity
 import com.dessalines.thumbkey.R
+import com.dessalines.thumbkey.ThumbkeyApplication
 import com.dessalines.thumbkey.db.AppSettingsViewModel
 import com.dessalines.thumbkey.db.DEFAULT_KEYBOARD_LAYOUT
 import com.dessalines.thumbkey.db.LayoutsUpdate
@@ -1478,16 +1479,28 @@ fun performKeyAction(
             val imeManager =
                 ime.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             val list: List<InputMethodInfo> = imeManager.enabledInputMethodList
-            for (el in list) {
-                for (i in 0 until el.subtypeCount) {
-                    if (el.getSubtypeAt(i).mode != "voice") continue
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        ime.switchInputMethod(el.id)
-                    } else {
-                        ime.window.window?.let { window ->
-                            @Suppress("DEPRECATION")
-                            imeManager.setInputMethod(window.attributes.token, el.id)
-                        }
+            val keyModifications =
+                (ime.application as ThumbkeyApplication)
+                    .appSettingsRepository.appSettings.value
+                    ?.keyModifications
+                    .orEmpty()
+            val preferredId = getPreferredVoiceImeId(keyModifications)
+            val targets =
+                if (preferredId != null) {
+                    list.filter { it.id == preferredId }
+                } else {
+                    list
+                        .filter { el ->
+                            (0 until el.subtypeCount).any { i -> el.getSubtypeAt(i).mode == "voice" }
+                        }.take(1)
+                }
+            for (el in targets) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    ime.switchInputMethod(el.id)
+                } else {
+                    ime.window.window?.let { window ->
+                        @Suppress("DEPRECATION")
+                        imeManager.setInputMethod(window.attributes.token, el.id)
                     }
                 }
             }
