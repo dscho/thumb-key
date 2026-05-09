@@ -32,6 +32,7 @@ import com.dessalines.thumbkey.ui.components.settings.clipboard.ClipboardSetting
 import com.dessalines.thumbkey.ui.components.settings.lookandfeel.LookAndFeelScreen
 import com.dessalines.thumbkey.ui.components.settings.modifykeys.ModifyKeysScreen
 import com.dessalines.thumbkey.ui.components.settings.other.OtherSettingsScreen
+import com.dessalines.thumbkey.ui.components.settings.voiceinput.VoiceInputScreen
 import com.dessalines.thumbkey.ui.components.setup.SetupScreen
 import com.dessalines.thumbkey.ui.theme.ThumbkeyTheme
 import com.dessalines.thumbkey.utils.ANIMATION_SPEED
@@ -185,6 +186,12 @@ class MainActivity : AppCompatActivity() {
                     }
                     composable(route = "otherSettings") {
                         OtherSettingsScreen(
+                            navController = navController,
+                            appSettingsViewModel = appSettingsViewModel,
+                        )
+                    }
+                    composable(route = "voiceInput") {
+                        VoiceInputScreen(
                             navController = navController,
                             appSettingsViewModel = appSettingsViewModel,
                         )

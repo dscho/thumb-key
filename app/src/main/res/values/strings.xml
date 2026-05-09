@@ -144,6 +144,11 @@
     <string name="use_private_clipboard_description">Copy into internal clipboard instead of system clipboard"</string>
     <!-- Other -->
     <string name="other">Other</string>
+    <string name="voice_input">Voice input</string>
+    <string name="preferred_voice_ime">Preferred voice input method</string>
+    <string name="voice_input_none_label">None (use first available)</string>
+    <string name="voice_input_no_voice_imes">No other input methods are enabled. Tap to open Android system settings.</string>
+    <string name="voice_input_open_system_settings">Open Android input method settings</string>
     <string name="show_on_screen_keyboard">Show on-screen keyboard</string>
     <string name="show_on_screen_keyboard_description">Show on-screen keyboard while using physical keyboard</string>
 </resources>

@@ -15,6 +15,7 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.InstallMobile
 import androidx.compose.material.icons.outlined.KeyboardAlt
+import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.TouchApp
@@ -197,6 +198,16 @@ fun SettingsScreen(
                             )
                         },
                         onClick = { navController.navigate("otherSettings") },
+                    )
+                    Preference(
+                        title = { Text(stringResource(R.string.voice_input)) },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Mic,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = { navController.navigate("voiceInput") },
                     )
                     Preference(
                         title = { Text(stringResource(R.string.user_guide)) },
